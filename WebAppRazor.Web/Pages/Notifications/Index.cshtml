@@ -1,0 +1,164 @@
+@page
+@model WebAppRazor.Web.Pages.Notifications.IndexModel
+@{
+    ViewData["Title"] = "Thông báo";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="section-title mb-0">
+        <i class="fas fa-bell me-2"></i>Thông báo
+        @if (Model.UnreadCount > 0)
+        {
+            <span class="badge bg-danger ms-2">@Model.UnreadCount mới</span>
+        }
+    </h2>
+    <div>
+        @if (Model.UnreadCount > 0)
+        {
+            <form method="post" asp-page-handler="MarkAllRead" class="d-inline">
+                <button type="submit" class="btn btn-outline-success btn-sm">
+                    <i class="fas fa-check-double me-1"></i> Đánh dấu tất cả đã đọc
+                </button>
+            </form>
+        }
+    </div>
+</div>
+
+<!-- Quick Reminders -->
+<div class="card mb-4">
+    <div class="card-header-custom">
+        <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Tạo nhắc nhở nhanh</h5>
+    </div>
+    <div class="card-body p-4">
+        <div class="row g-2">
+            <div class="col-auto">
+                <form method="post" asp-page-handler="CreateReminder" class="d-inline">
+                    <input type="hidden" name="reminderType" value="Breakfast" />
+                    <button type="submit" class="btn btn-outline-warning">
+                        <i class="fas fa-sun me-1"></i> Nhắc bữa sáng
+                    </button>
+                </form>
+            </div>
+            <div class="col-auto">
+                <form method="post" asp-page-handler="CreateReminder" class="d-inline">
+                    <input type="hidden" name="reminderType" value="Lunch" />
+                    <button type="submit" class="btn btn-outline-info">
+                        <i class="fas fa-cloud-sun me-1"></i> Nhắc bữa trưa
+                    </button>
+                </form>
+            </div>
+            <div class="col-auto">
+                <form method="post" asp-page-handler="CreateReminder" class="d-inline">
+                    <input type="hidden" name="reminderType" value="Dinner" />
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="fas fa-moon me-1"></i> Nhắc bữa tối
+                    </button>
+                </form>
+            </div>
+            <div class="col-auto">
+                <form method="post" asp-page-handler="CreateReminder" class="d-inline">
+                    <input type="hidden" name="reminderType" value="Shopping" />
+                    <button type="submit" class="btn btn-outline-success">
+                        <i class="fas fa-shopping-cart me-1"></i> Nhắc mua nguyên liệu
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Notification List -->
+<div class="card">
+    <div class="card-body p-4">
+        @if (Model.AllNotifications.Count == 0)
+        {
+            <div class="text-center py-5">
+                <i class="fas fa-bell-slash fa-3x text-muted mb-3"></i>
+                <p class="text-muted">Chưa có thông báo nào.</p>
+            </div>
+        }
+        else
+        {
+            @foreach (var notification in Model.AllNotifications)
+            {
+                var iconClass = notification.Type switch
+                {
+                    "MealReminder" => "fa-utensils text-warning",
+                    "ShoppingReminder" => "fa-shopping-cart text-success",
+                    "ReviewReminder" => "fa-star text-info",
+                    "NewMenu" => "fa-magic text-primary",
+                    "Promotion" => "fa-gift text-danger",
+                    _ => "fa-info-circle text-secondary"
+                };
+
+                <div class="notification-item @(!notification.IsRead ? "unread" : "")">
+                    <div class="d-flex align-items-start">
+                        <div class="notification-icon me-3">
+                            <i class="fas @iconClass fa-lg"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between">
+                                <h6 class="fw-bold mb-1">@notification.Title</h6>
+                                <small class="text-muted">@notification.CreatedAt.ToString("dd/MM HH:mm")</small>
+                            </div>
+                            <p class="text-muted mb-0 small">@notification.Message</p>
+                        </div>
+                        @if (!notification.IsRead)
+                        {
+                            <form method="post" asp-page-handler="MarkRead" class="ms-2">
+                                <input type="hidden" name="notificationId" value="@notification.Id" />
+                                <button type="submit" class="btn btn-sm btn-outline-success" title="Đánh dấu đã đọc">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                            </form>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script>
+        const userId = '@User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value';
+        if (userId) {
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/notificationHub")
+                .withAutomaticReconnect()
+                .build();
+
+            connection.on("ReceiveNotification", function (title, message, type) {
+                // Show toast notification
+                showToast(title, message);
+                // Reload page to show new notification
+                setTimeout(() => location.reload(), 2000);
+            });
+
+            connection.start().then(function () {
+                connection.invoke("JoinUserGroup", userId);
+            }).catch(function (err) {
+                console.error(err.toString());
+            });
+
+            function showToast(title, message) {
+                var toastHtml = `
+                    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 9999;">
+                        <div class="toast show" role="alert">
+                            <div class="toast-header bg-success text-white">
+                                <i class="fas fa-bell me-2"></i>
+                                <strong class="me-auto">${title}</strong>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+                            </div>
+                            <div class="toast-body">${message}</div>
+                        </div>
+                    </div>`;
+                document.body.insertAdjacentHTML('beforeend', toastHtml);
+                setTimeout(() => {
+                    document.querySelector('.toast')?.closest('.position-fixed')?.remove();
+                }, 5000);
+            }
+        }
+    </script>
+}
